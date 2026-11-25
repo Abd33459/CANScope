@@ -1,69 +1,141 @@
 
-CANScope – Virtual CAN Bus Simulator
+#include <stdio.h>
+#include <stdint.h>
 
-A C-based software simulation demonstrating fundamental Controller Area Network (CAN) concepts.
+#define SIZE 5
 
-Project Overview
+typedef struct
+{
+    uint16_t id;
+    uint8_t dlc;
+    uint8_t data[8];
 
-CANScope is a lightweight CAN concept simulator developed using C programming.
+} CAN_Frame;
 
-The project simulates multiple virtual ECUs generating CAN messages. These messages are stored in a circular FIFO queue, validated, and processed to demonstrate selected CAN communication concepts.
+CAN_Frame queue[SIZE];
 
-It includes an engine RPM decoding example and a simplified CAN arbitration demonstration.
+int front = 0, rear = -1, count = 0;
 
-Key Features
+// Validate CAN frame
+int validate(CAN_Frame msg)
+{
+    if(msg.id > 0x7FF)
+        return 0;
 
-- Classical CAN standard frame representation (11-bit identifier)
-- CAN frame validation
-- DLC validation (0–8 bytes)
-- Circular FIFO queue implementation
-- Queue overflow detection
-- Engine RPM decoding using bitwise operations
-- Pointer-based output handling
-- Simplified CAN arbitration priority demonstration
-- Invalid frame and insufficient payload detection
+    if(msg.dlc > 8)
+        return 0;
 
-Technology Stack
+    return 1;
+}
 
-- Programming Language: C
-- Development Environment: Cxxdroid
-- Platform: Android
-- Concepts: Structures, pointers, arrays, functions, bitwise operations, circular queues
+// Add frame to circular queue
+int enqueue(CAN_Frame msg)
+{
+    if(count == SIZE)
+    {
+        printf("Queue Full!\n");
+        return 0;
+    }
 
-Project Scope
+    rear = (rear + 1) % SIZE;
+    queue[rear] = msg;
+    count++;
 
-This is a software-based simulation of selected CAN concepts. It does not implement physical CAN hardware, actual bus communication, bit timing, CRC, ACK, or error frames.
+    return 1;
+}
 
-Sample Output
+// Decode engine RPM safely
+int decode_engine_rpm(CAN_Frame msg, uint16_t *rpm)
+{
+    if(rpm == NULL || msg.dlc < 2)
+    {
+        return 0;
+    }
 
-=== CANScope Started ===
-Engine message queued
-Speed message queued
-Temperature message queued
+    *rpm = ((uint16_t)msg.data[0] << 8) |
+            msg.data[1];
 
-=== Message Processing ===
+    return 1;
+}
 
-CAN ID: 0x100
-DLC: 2
-Engine RPM: 3000
+// Process queued CAN messages
+void process(void)
+{
+    while(count > 0)
+    {
+        CAN_Frame msg = queue[front];
 
-CAN ID: 0x200
-DLC: 1
-Message received
+        front = (front + 1) % SIZE;
+        count--;
 
-CAN ID: 0x300
-DLC: 1
-Message received
+        printf("\nCAN ID: 0x%03X\n", msg.id);
 
-=== Arbitration Demo ===
-Winner: 0x100
+        if(!validate(msg))
+        {
+            printf("FAULT: Invalid frame\n");
+            continue;
+        }
 
-=== Simulation Complete ===
+        printf("DLC: %u\n", msg.dlc);
 
-Learning Outcomes
+        if(msg.id == 0x100)
+        {
+            uint16_t rpm = 0;
 
-- Practical C structure and pointer usage
-- Circular FIFO queue implementation
-- Bitwise data decoding
-- Input validation and fault handling
-- Understanding selected CAN communication concepts
+            if(decode_engine_rpm(msg, &rpm))
+            {
+                printf("Engine RPM: %u\n", rpm);
+            }
+            else
+            {
+                printf("FAULT: Insufficient RPM data\n");
+            }
+        }
+        else
+        {
+            printf("Message received\n");
+        }
+    }
+}
+
+// Simplified CAN arbitration demonstration
+uint16_t arbitrate(uint16_t a, uint16_t b)
+{
+    return (a < b) ? a : b;
+}
+
+int main(void)
+{
+    CAN_Frame engine =
+        {0x100, 2, {0x0B, 0xB8}};
+
+    CAN_Frame speed =
+        {0x200, 1, {0x50}};
+
+    CAN_Frame temp =
+        {0x300, 1, {0x5A}};
+
+    printf("=== CANScope Started ===\n");
+
+    if(enqueue(engine))
+        printf("Engine message queued\n");
+
+    if(enqueue(speed))
+        printf("Speed message queued\n");
+
+    if(enqueue(temp))
+        printf("Temperature message queued\n");
+
+    printf("\n=== Message Processing ===\n");
+
+    process();
+
+    printf("\n=== Arbitration Demo ===\n");
+
+    printf("Winner: 0x%03X\n",
+        arbitrate(0x100, 0x200));
+
+    printf("\n=== Simulation Complete ===\n");
+
+    return 0;
+}
