@@ -110,3 +110,58 @@ This project is a software concept simulator. It does not implement:
 - Implement configurable message filtering.
 - Add simulated bus-load analysis.
 - Improve arbitration simulation with bit-level identifier comparison.
+
+
+## 7. Architecture Diagram
+
+The following diagram illustrates the CANScope message-processing workflow.
+
+```mermaid
+flowchart TD
+    A["main()"] --> B["Initialize CAN Frames"]
+    B --> C["enqueue()"]
+    C --> D["Circular FIFO Queue<br/>Capacity: 5"]
+    D --> E["process()"]
+    E --> F["validate()"]
+    F --> G{"Frame Valid?"}
+
+    G -->|No| H["Invalid Frame Fault"]
+    G -->|Yes| I{"CAN ID = 0x100?"}
+
+    I -->|Yes| J["decode_engine_rpm()"]
+    J --> K["Check DLC and NULL Pointer"]
+    K --> L["Decode RPM"]
+    L --> M["Display Engine RPM"]
+
+    I -->|No| N["Display Message Received"]
+
+    H --> O["Next Queued Frame"]
+    M --> O
+    N --> O
+
+    O --> P{"Queue Empty?"}
+    P -->|No| E
+    P -->|Yes| Q["Simplified Arbitration"]
+    Q --> R["Simulation Complete"]
+```
+
+## 8. Circular Queue Design
+
+CANScope uses a circular FIFO queue with a maximum capacity of five CAN frames.
+
+| Variable | Purpose |
+|---|---|
+| front | Index of the next frame to process |
+| rear | Index of the latest inserted frame |
+| count | Number of frames currently stored |
+| SIZE | Maximum queue capacity |
+
+Circular indexing:
+
+```c
+rear = (rear + 1) % SIZE;
+front = (front + 1) % SIZE;
+```
+
+The modulo operator allows the queue indices to wrap around to the beginning of the array.
+
